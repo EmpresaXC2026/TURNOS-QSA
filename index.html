@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ruleta de Turnos — KM. 145</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:Arial, Helvetica, sans-serif;background:#eef1f4;color:#222;padding-bottom:50px;}
+  .wrap{max-width:820px;margin:0 auto;padding:16px 12px 40px;}
+  h1{font-size:20px;margin:14px 0 2px;color:#1c1c1c;}
+  .sub{font-size:12.5px;color:#666;margin:0 0 16px;}
+
+  section.card{background:#fff;border:1px solid #d8dee3;border-radius:6px;padding:14px;margin-bottom:14px;}
+  section.card h2{font-size:14px;margin:0 0 10px;color:#fff;background:#e8720c;padding:8px 10px;border-radius:4px;}
+  .hint{font-size:12px;color:#666;margin:-4px 0 10px;line-height:1.5;}
+
+  label{font-size:12px;color:#444;display:block;margin-bottom:3px;}
+  input[type=text], input[type=number], input[type=date], select{
+    border:1px solid #c7ccd1;border-radius:4px;padding:7px 8px;font-size:13.5px;width:100%;background:#fff;
+  }
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+  .row > div{flex:1;min-width:130px;}
+  .btn{font-size:13px;padding:8px 14px;border-radius:4px;border:1px solid #e8720c;background:#fff;color:#e8720c;cursor:pointer;}
+  .btn:hover{background:#fff3e8;}
+  .btn.primary{background:#e8720c;color:#fff;font-weight:bold;}
+  .btn.big{font-size:15px;padding:12px 26px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:6px 8px;border:1px solid #bcd6e8;text-align:left;}
+  th{background:#e8720c;color:#fff;font-size:11.5px;text-transform:uppercase;}
+  tr.t2 td, tr.w1 td{background:#ffffff;}
+  tr.t3 td{background:#dcf2dc;}
+  tr.t4 td, tr.w2 td{background:#fdf6c9;}
+  tr.t1 td{background:#dbeafe;}
+  tr.baseRow td{background:#ffffff;font-weight:bold;}
+  tr.unassigned td{color:#c0392b;font-style:italic;background:#fde8e8 !important;}
+  tr.spacer td{border:none;background:transparent;padding:2px;}
+
+  .title-bar{background:#161616;color:#fff;font-weight:bold;font-size:13.5px;padding:8px 10px;border-radius:4px 4px 0 0;}
+  .day-toggles{display:flex;gap:6px;}
+  .day-chip{
+    padding:4px 9px;border-radius:4px;font-size:11px;border:1px solid #c7ccd1;cursor:pointer;user-select:none;
+    background:#f5f6f8;color:#999;
+  }
+  .day-chip.on{background:#e8720c;color:#fff;border-color:#e8720c;font-weight:bold;}
+  .emp-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed #e2e6ea;flex-wrap:wrap;}
+  .emp-name{flex:1;min-width:160px;font-size:13px;}
+  .remove-x{color:#c0392b;cursor:pointer;font-size:13px;padding:0 6px;}
+
+  .exclusion-item{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px dashed #e2e6ea;}
+  .export-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+  .footnote{font-size:11.5px;color:#888;margin-top:6px;line-height:1.5;}
+  .warn-box{background:#fde8e8;border:1px solid #f2c2c2;border-radius:6px;padding:9px 11px;font-size:12.5px;color:#a33;margin-bottom:10px;}
+  .idle-box{background:#eef1f4;border:1px solid #d8dee3;border-radius:6px;padding:9px 11px;font-size:12.5px;color:#555;margin-bottom:10px;}
+  .spin-center{text-align:center;padding:6px 0 4px;}
+  .spin-count{font-size:12px;color:#888;margin-top:6px;}
+  .block-title{font-size:13px;font-weight:bold;color:#1c1c1c;margin:14px 0 4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1 id="appTitle" onclick="handleTitleTap()" style="cursor:default;user-select:none;">🎲 Ruleta de Turnos — KM. 145</h1>
+  <p class="sub">Gira, revisa la tabla, y repite hasta que te convenza.</p>
+
+  <section class="card" id="roleBar" style="display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div id="roleStatus" style="font-size:13px;"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn" id="logoutBtn" onclick="switchToQSA()">🔒 Volver a vista QSA Lista</button>
+      <input type="text" id="newPinInput" placeholder="Nuevo PIN" style="width:110px;">
+      <button class="btn" id="changePinBtn" onclick="changeAdminPin()">Cambiar PIN</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Reglas</h2>
+    <div class="row">
+      <div>
+        <label>Descanso mínimo entre turnos (horas)</label>
+        <input type="number" id="minDescanso" min="0" max="48" value="12">
+      </div>
+      <div>
+        <label>Proyecto</label>
+        <input type="text" id="proyecto" value="KM. 145">
+      </div>
+      <div>
+        <label>Semana del (lunes)</label>
+        <input type="date" id="fechaLunes">
+      </div>
+    </div>
+    <p class="hint">
+      Entre semana (lunes a viernes) todos trabajan el mismo turno de 6 horas los 5 días — no cambia día a día.
+      Sábado y domingo son turnos de 12 horas (06:00–18:00 y 18:00–06:00), solo para quien esté disponible esos días.
+      El descanso mínimo evita, por ejemplo, que alguien termine su turno el viernes y caiga en un turno pesado el sábado, o que termine el domingo y le toque un turno muy pronto el lunes.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Encargados de Base (solo se turnean entre ellos)</h2>
+    <p class="hint">Cubren únicamente BASE 1 (06:00–12:00 y 12:00–18:00 entre semana). Nunca rotan con las casetas V1–V4.</p>
+    <div id="baseList"></div>
+    <div class="row" style="margin-top:8px;">
+      <div><input type="text" id="newBaseName" placeholder="Nombre completo"></div>
+      <div style="flex:0;"><button class="btn primary" onclick="addEmployee(true)">+ Agregar encargado</button></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Compañeros de Casetas V1–V4</h2>
+    <p class="hint">Incluye a todos, también quienes están en capacitación — sí trabajan. Marca si además pueden cubrir sábado y/o domingo (turno de 12 horas).</p>
+    <div id="empList"></div>
+    <div class="row" style="margin-top:8px;">
+      <div><input type="text" id="newEmpName" placeholder="Nombre completo"></div>
+      <div style="flex:0;"><button class="btn primary" onclick="addEmployee(false)">+ Agregar compañero</button></div>
+    </div>
+  </section>
+
+  <div id="adminOnlyWrap">
+  <section class="card">
+    <h2>Restricciones entre personas</h2>
+    <p class="hint">Ej.: Juan no puede coincidir en el mismo turno que Pedro (aunque estén en casetas distintas).</p>
+    <div class="row">
+      <div><select id="exclA"></select></div>
+      <div><select id="exclB"></select></div>
+      <div style="flex:0;"><button class="btn" onclick="addExclusion()">+ Agregar</button></div>
+    </div>
+    <div id="exclList"></div>
+  </section>
+
+  <section class="card">
+    <h2>Preferencias: sí se pueden topar</h2>
+    <p class="hint">Ej.: Juan trabaja con Pedro — la ruleta va a intentar ponerlos en el mismo turno cuando sea posible (sin romper las demás reglas).</p>
+    <div class="row">
+      <div><select id="prefA"></select></div>
+      <div><select id="prefB"></select></div>
+      <div style="flex:0;"><button class="btn" onclick="addPreferencia()">+ Agregar</button></div>
+    </div>
+    <div id="prefList"></div>
+  </section>
+  </div>
+
+  <section class="card">
+    <h2>Continuidad entre semanas</h2>
+    <p class="hint">Cuando confirmes una tabla, se guarda cómo terminó cada quien (si venía de madrugada, si tuvo fin de semana ligero, etc.) para que, al girar la tabla de la próxima semana, a nadie le toque madrugada de golpe justo después de haber tenido horario ligero el fin de semana.</p>
+    <div id="profileStatus" class="idle-box">Cargando tabla anterior…</div>
+    <div class="export-row">
+      <button class="btn primary" id="confirmBtn" onclick="confirmWeek()" disabled>✅ Confirmar esta tabla como definitiva</button>
+      <button class="btn" onclick="forgetPrevious()">🗑️ Olvidar tabla anterior</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="spin-center">
+      <button class="btn primary big" id="spinBtn" onclick="spin()">🎲 Girar ruleta</button>
+      <div class="spin-count" id="spinCount">Sin girar todavía</div>
+    </div>
+    <div id="warnBox"></div>
+    <div id="idleBox"></div>
+    <div id="scheduleOut"></div>
+    <div class="export-row" id="exportRow" style="display:none;">
+      <button class="btn primary" onclick="exportExcel()">📊 Descargar Excel</button>
+      <button class="btn primary" onclick="exportPDF()">📄 Descargar PDF</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const WD_TURNOS = [
+  {id:'t2', label:'06:00 A 12:00', start:6,  end:12},
+  {id:'t3', label:'12:00 A 18:00', start:12, end:18},
+  {id:'t4', label:'18:00 A 00:00', start:18, end:24},
+  {id:'t1', label:'00:00 A 06:00', start:24, end:30}, // treated as next-day-relative for gap math
+];
+const WE_TURNOS = [
+  {id:'w1', label:'06:00 A 18:00', start:6,  end:18},
+  {id:'w2', label:'18:00 A 06:00', start:18, end:30},
+];
+const CABINAS = ['V1','V2','V3','V4'];
+
+/* Generic constraint-relaxing filler: tries several shuffles per level of strictness,
+   and only relaxes a soft rule if the stricter level truly cannot fill every slot
+   (posts must never be left uncovered when there is enough staff). */
+function robustFill(slots, pool, buildCandidateFn, levels, maxAttemptsPerLevel=120, scoreFn=null){
+  function attempt(candidateFn){
+    const shuffledSlots = shuffle(slots);
+    const usedSet = new Set();
+    const assigned = [];
+    const unassigned = [];
+    shuffledSlots.forEach(slot=>{
+      const candidates = candidateFn(slot, assigned, usedSet);
+      if(candidates.length===0){ unassigned.push(slot); return; }
+      const chosen = candidates[Math.floor(Math.random()*candidates.length)];
+      usedSet.add(chosen.id);
+      assigned.push({...slot, empId:chosen.id});
+    });
+    return {assigned, unassigned};
+  }
+  let bestPartial = null;
+  let bestFull = null;
+  const FULL_SEARCH_CAP = scoreFn ? 40 : 1; // if scoring, compare several valid attempts and keep the best
+  for(let li=0; li<levels.length; li++){
+    const candidateFn = buildCandidateFn(levels[li]);
+    let fullFound = 0;
+    for(let a=0; a<maxAttemptsPerLevel; a++){
+      const res = attempt(candidateFn);
+      if(res.unassigned.length===0){
+        if(!scoreFn) return {...res, relaxedLevel: li};
+        const score = scoreFn(res.assigned);
+        if(!bestFull || score > bestFull.score) bestFull = {res, score, li};
+        fullFound++;
+        if(fullFound>=FULL_SEARCH_CAP) break;
+      } else if(!bestPartial || res.unassigned.length < bestPartial.res.unassigned.length){
+        bestPartial = {res, li};
+      }
+    }
+    if(bestFull) return {...bestFull.res, relaxedLevel: bestFull.li};
+  }
+  // Every level was tried; return the closest attempt found. Hard constraints (like a
+  // BASE1 slot only ever taking a BASE1 employee) are baked into buildCandidateFn itself,
+  // so this never bypasses them — it can only leave a slot unassigned, never fill it wrongly.
+  return {...bestPartial.res, relaxedLevel: bestPartial.li};
+}
+
+let empIdSeq = 1;
+function mkEmp(nombre, isBase){
+  return {id:'e'+(empIdSeq++), nombre, isBase, sabado:false, domingo:false};
+}
+
+let state = {
+  base: [
+    mkEmp('Alvaro Romeo Miranda Gomez', true),
+    mkEmp('Jorge Nehemias Leja Cox', true),
+  ],
+  empleados: [
+    mkEmp('Bryan Daniel Estrada Nolasco', false),
+    mkEmp('Uziel Luis Eli Mazariegos Santizo', false),
+    mkEmp('Katerine Mackensy López Morán', false),
+    mkEmp('Jacqueline Pamela Garcia Mendoza', false),
+    mkEmp('Adriana Guisela Mijangos Tobar', false),
+    mkEmp('Lina Mishel Lapoyeu Carrillo', false),
+    mkEmp('Darlin Griselda Ruiz Gomez', false),
+    mkEmp('Khaterine Patricia Chiquirin Perdomo', false),
+    mkEmp('Daydi Leylani Suhul Batz', false),
+    mkEmp('Carlos Gabriel Tamup Otuc', false),
+    mkEmp('Luisa Fernanda Mejía Ajquí', false),
+    mkEmp('Jose Alfredo Sanchez Monge', false),
+    mkEmp('Jose Gabriel Tol Sincu', false),
+    mkEmp('Erick Fernando Xiloj Ceren', false),
+    mkEmp('Fernando Estuardo Garcia Tupul', false),
+    mkEmp('Emely Sarai Garcia Camey', false),
+  ],
+  exclusiones: [],
+  preferencias: [],
+  schedule: null,
+  spinCount: 0,
+  previousWeekProfile: {},
+  role: 'qsa',
+  adminPin: '1234',
+};
+
+function allEmpleados(){ return [...state.base, ...state.empleados]; }
+function findEmp(id){ return allEmpleados().find(e=>e.id===id); }
+function empName(id){ const e = findEmp(id); return e ? e.nombre : '?'; }
+function isExcludedPair(id1, id2){
+  return state.exclusiones.some(x=>(x.a===id1&&x.b===id2)||(x.a===id2&&x.b===id1));
+}
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+/* ---------- Roles: Administrador vs QSA Lista ---------- */
+let _titleTapCount = 0;
+let _titleTapTimer = null;
+function handleTitleTap(){
+  if(state.role==='admin') return; // already unlocked, no need for the secret gesture
+  _titleTapCount++;
+  if(_titleTapTimer) clearTimeout(_titleTapTimer);
+  _titleTapTimer = setTimeout(()=>{ _titleTapCount = 0; }, 2000);
+  if(_titleTapCount>=5){
+    _titleTapCount = 0;
+    promptAdminLogin();
+  }
+}
+function renderRoleBar(){
+  const isAdmin = state.role==='admin';
+  // QSA Lista never sees any trace that an admin view exists at all.
+  document.getElementById('roleBar').style.display = isAdmin ? 'flex' : 'none';
+  if(isAdmin){
+    document.getElementById('roleStatus').innerHTML = `Vista actual: <strong>👑 Administrador</strong>`;
+  }
+  document.getElementById('adminOnlyWrap').style.display = isAdmin ? 'block' : 'none';
+}
+function promptAdminLogin(){
+  const pin = prompt('PIN de administrador:');
+  if(pin===null) return;
+  if(pin === state.adminPin){
+    state.role = 'admin';
+    renderRoleBar();
+  } else {
+    alert('PIN incorrecto.');
+  }
+}
+function switchToQSA(){
+  state.role = 'qsa';
+  renderRoleBar();
+}
+function changeAdminPin(){
+  const inp = document.getElementById('newPinInput');
+  const val = inp.value.trim();
+  if(!val) return;
+  state.adminPin = val;
+  inp.value = '';
+  alert('PIN actualizado.');
+}
+
+/* ---------- UI: employee lists ---------- */
+function renderBaseList(){
+  const el = document.getElementById('baseList');
+  el.innerHTML = '';
+  state.base.forEach(emp=>{
+    const row = document.createElement('div');
+    row.className = 'emp-row';
+    row.innerHTML = `<div class="emp-name">${emp.nombre}</div><div class="remove-x" onclick="removeEmp('${emp.id}')">✕</div>`;
+    el.appendChild(row);
+  });
+}
+function renderEmpList(){
+  renderBaseList();
+  const el = document.getElementById('empList');
+  el.innerHTML = '';
+  state.empleados.forEach(emp=>{
+    const row = document.createElement('div');
+    row.className = 'emp-row';
+    row.innerHTML = `<div class="emp-name">${emp.nombre}</div>
+      <div class="day-toggles">
+        <div class="day-chip ${emp.sabado?'on':''}" onclick="toggleWeekend('${emp.id}','sabado')">Sáb</div>
+        <div class="day-chip ${emp.domingo?'on':''}" onclick="toggleWeekend('${emp.id}','domingo')">Dom</div>
+      </div>
+      <div class="remove-x" onclick="removeEmp('${emp.id}')">✕</div>`;
+    el.appendChild(row);
+  });
+  renderExclSelects();
+}
+function toggleWeekend(id, key){
+  const emp = findEmp(id);
+  emp[key] = !emp[key];
+  renderEmpList();
+}
+function removeEmp(id){
+  state.base = state.base.filter(e=>e.id!==id);
+  state.empleados = state.empleados.filter(e=>e.id!==id);
+  state.exclusiones = state.exclusiones.filter(x=>x.a!==id && x.b!==id);
+  state.preferencias = state.preferencias.filter(x=>x.a!==id && x.b!==id);
+  renderEmpList();
+  renderExclList();
+  renderPrefList();
+}
+function addEmployee(isBase){
+  const inputId = isBase ? 'newBaseName' : 'newEmpName';
+  const inp = document.getElementById(inputId);
+  const name = inp.value.trim();
+  if(!name) return;
+  const emp = mkEmp(name, isBase);
+  if(isBase) state.base.push(emp); else state.empleados.push(emp);
+  inp.value='';
+  renderEmpList();
+}
+function renderExclSelects(){
+  const opts = allEmpleados().map(e=>`<option value="${e.id}">${e.nombre}${e.isBase?' (Base)':''}</option>`).join('');
+  document.getElementById('exclA').innerHTML = opts;
+  document.getElementById('exclB').innerHTML = opts;
+  document.getElementById('prefA').innerHTML = opts;
+  document.getElementById('prefB').innerHTML = opts;
+}
+function addExclusion(){
+  const a = document.getElementById('exclA').value;
+  const b = document.getElementById('exclB').value;
+  if(!a || !b || a===b) return;
+  if(state.exclusiones.some(x=>(x.a===a&&x.b===b)||(x.a===b&&x.b===a))) return;
+  state.exclusiones.push({a,b});
+  renderExclList();
+}
+function removeExclusion(idx){ state.exclusiones.splice(idx,1); renderExclList(); }
+function renderExclList(){
+  const el = document.getElementById('exclList');
+  el.innerHTML = '';
+  if(state.exclusiones.length===0){ el.innerHTML = '<p class="footnote">Sin restricciones agregadas.</p>'; return; }
+  state.exclusiones.forEach((x,idx)=>{
+    const div = document.createElement('div');
+    div.className='exclusion-item';
+    div.innerHTML = `<span>${empName(x.a)} ⚡ ${empName(x.b)}</span><span class="remove-x" onclick="removeExclusion(${idx})">✕</span>`;
+    el.appendChild(div);
+  });
+}
+
+function addPreferencia(){
+  const a = document.getElementById('prefA').value;
+  const b = document.getElementById('prefB').value;
+  if(!a || !b || a===b) return;
+  if(state.preferencias.some(x=>(x.a===a&&x.b===b)||(x.a===b&&x.b===a))) return;
+  state.preferencias.push({a,b});
+  renderPrefList();
+}
+function removePreferencia(idx){ state.preferencias.splice(idx,1); renderPrefList(); }
+function renderPrefList(){
+  const el = document.getElementById('prefList');
+  el.innerHTML = '';
+  if(state.preferencias.length===0){ el.innerHTML = '<p class="footnote">Sin preferencias agregadas.</p>'; return; }
+  state.preferencias.forEach((x,idx)=>{
+    const div = document.createElement('div');
+    div.className='exclusion-item';
+    div.innerHTML = `<span>${empName(x.a)} 🤝 ${empName(x.b)}</span><span class="remove-x" onclick="removePreferencia(${idx})">✕</span>`;
+    el.appendChild(div);
+  });
+}
+function preferenceScore(assigned){
+  if(state.preferencias.length===0) return 0;
+  let score = 0;
+  state.preferencias.forEach(pref=>{
+    const aA = assigned.find(x=>x.empId===pref.a);
+    const bA = assigned.find(x=>x.empId===pref.b);
+    if(aA && bA && aA.turnoId===bA.turnoId) score++;
+  });
+  return score;
+}
+
+/* ---------- Scheduling engine ---------- */
+function generateSchedule(){
+  const minDescanso = parseFloat(document.getElementById('minDescanso').value) || 0;
+
+  // --- 1) Weekday: BASE1, fixed for all 5 days ---
+  const baseShuffled = shuffle(state.base);
+  const baseAssign = state.base.length>=2 ? [
+    {cabina:'BASE1', turnoId:'t2', empId:baseShuffled[0].id},
+    {cabina:'BASE1', turnoId:'t3', empId:baseShuffled[1].id},
+  ] : [];
+
+  // --- 2) Weekday: V1-V4 x 4 turnos + 1 Apoyo (06-12), fixed for all 5 days ---
+  let genSlots = [];
+  ['t2','t3','t4','t1'].forEach(tid=> CABINAS.forEach(cab=> genSlots.push({cabina:cab, turnoId:tid})) );
+
+  function buildWeekdayCandidateFn(opts){
+    return (slot, assigned, usedSet)=>{
+      let candidates = state.empleados.filter(e=> !usedSet.has(e.id));
+      if(opts.exclusion){
+        const sameTurnoIds = assigned.filter(a=>a.turnoId===slot.turnoId).map(a=>a.empId);
+        candidates = candidates.filter(c=> !sameTurnoIds.some(id=>isExcludedPair(id,c.id)) );
+      }
+      if(opts.continuity && slot.turnoId==='t1'){
+        candidates = candidates.filter(e=>{
+          const p = state.previousWeekProfile[e.nombre];
+          if(p && p.weekdayCat==='night' && p.weekendCat!=='night') return false;
+          return true;
+        });
+      }
+      return candidates;
+    };
+  }
+  const genRes = robustFill(genSlots, state.empleados, buildWeekdayCandidateFn, [
+    {exclusion:true, continuity:true},
+    {exclusion:true, continuity:false},
+    {exclusion:false, continuity:false},
+  ], 120, preferenceScore);
+  const weekdayAssign = genRes.assigned;
+  const weekdayUnassigned = genRes.unassigned;
+  const weekdayRelaxNote = genRes.relaxedLevel===1 ? 'continuidad de madrugada'
+    : genRes.relaxedLevel>=2 ? 'restricciones entre personas' : null;
+
+  const assignedIds = new Set(weekdayAssign.map(a=>a.empId));
+  const noAsignadoEntreSemana = state.empleados.filter(e=>!assignedIds.has(e.id));
+
+  // Weekday end-of-Friday absolute hour per employee (day index 4 = Friday), for rest-gap into Saturday
+  const fridayEndAbs = {};
+  weekdayAssign.forEach(a=>{
+    const t = WD_TURNOS.find(t=>t.id===a.turnoId);
+    fridayEndAbs[a.empId] = 4*24 + t.end;
+  });
+  baseAssign.forEach(a=>{
+    const t = WD_TURNOS.find(t=>t.id===a.turnoId);
+    fridayEndAbs[a.empId] = 4*24 + t.end;
+  });
+  // Monday start absolute (next cycle) per employee, for rest-gap check out of Sunday
+  const mondayStartAbs = {};
+  weekdayAssign.forEach(a=>{
+    const t = WD_TURNOS.find(t=>t.id===a.turnoId);
+    mondayStartAbs[a.empId] = 7*24 + t.start;
+  });
+  baseAssign.forEach(a=>{
+    const t = WD_TURNOS.find(t=>t.id===a.turnoId);
+    mondayStartAbs[a.empId] = 7*24 + t.start;
+  });
+
+  // --- 3) Weekend: Saturday (day 5) then Sunday (day 6), 12h turnos ---
+  // Weekend coverage stays optional/variable (only those marked available), so it is
+  // filled with the best possible match rather than forced — this is where real rest happens.
+  const lastEnd = {...fridayEndAbs};
+  const weekend = {Sabado:{assign:[],unassigned:[]}, Domingo:{assign:[],unassigned:[]}};
+  [['Sabado',5],['Domingo',6]].forEach(([label,d])=>{
+    let slots = [];
+    WE_TURNOS.forEach(t=> slots.push({cabina:'BASE1', turnoId:t.id}) );
+    WE_TURNOS.forEach(t=> CABINAS.forEach(cab=> slots.push({cabina:cab, turnoId:t.id})) );
+    const dayKey = label==='Sabado' ? 'sabado' : 'domingo';
+
+    function buildWeekendCandidateFn(opts){
+      return (slot, assigned, usedSet)=>{
+        const t = WE_TURNOS.find(t=>t.id===slot.turnoId);
+        const absStart = d*24 + t.start;
+        const absEnd = d*24 + t.end;
+        const pool = slot.cabina==='BASE1' ? state.base : state.empleados;
+        let candidates = pool.filter(e=>{
+          if(slot.cabina!=='BASE1' && !e[dayKey]) return false;
+          if(usedSet.has(e.id)) return false;
+          if(lastEnd[e.id]!==undefined && (absStart - lastEnd[e.id]) < minDescanso) return false;
+          if(label==='Domingo' && mondayStartAbs[e.id]!==undefined && (mondayStartAbs[e.id]-absEnd) < minDescanso) return false;
+          return true;
+        });
+        if(opts.exclusion){
+          const sameTurnoIds = assigned.filter(a=>a.turnoId===slot.turnoId).map(a=>a.empId);
+          candidates = candidates.filter(c=> !sameTurnoIds.some(id=>isExcludedPair(id,c.id)) );
+        }
+        return candidates;
+      };
+    }
+    const res = robustFill(slots, [...state.base, ...state.empleados], buildWeekendCandidateFn, [
+      {exclusion:true},
+      {exclusion:false},
+    ], 60, preferenceScore);
+    res.assigned.forEach(a=>{
+      const t = WE_TURNOS.find(t=>t.id===a.turnoId);
+      lastEnd[a.empId] = d*24 + t.end;
+    });
+    weekend[label] = {assign:res.assigned, unassigned:res.unassigned};
+  });
+
+  return { baseAssign, weekdayAssign, weekdayUnassigned, noAsignadoEntreSemana, weekdayRelaxNote, weekend };
+}
+
+function spin(){
+  state.schedule = generateSchedule();
+  state.spinCount++;
+  document.getElementById('spinCount').textContent = `Giro n.º ${state.spinCount} — gira otra vez si no te convence`;
+  document.getElementById('confirmBtn').disabled = false;
+  renderSchedule();
+}
+
+/* ---------- Week-to-week continuity (persisted via window.storage) ---------- */
+function computeWeekProfile(sch){
+  const profile = {};
+  function setWeekday(empId, tid){
+    const name = empName(empId);
+    profile[name] = profile[name] || {};
+    profile[name].weekdayCat = tid==='t1' ? 'night' : 'day';
+  }
+  sch.baseAssign.forEach(a=> setWeekday(a.empId, a.turnoId));
+  sch.weekdayAssign.forEach(a=> setWeekday(a.empId, a.turnoId));
+  function setWeekend(empId, tid){
+    const name = empName(empId);
+    profile[name] = profile[name] || {};
+    profile[name].weekendCat = tid==='w2' ? 'night' : 'day';
+  }
+  sch.weekend.Sabado.assign.forEach(a=> setWeekend(a.empId, a.turnoId));
+  sch.weekend.Domingo.assign.forEach(a=> setWeekend(a.empId, a.turnoId)); // Sunday overwrites Saturday (more recent)
+  Object.keys(profile).forEach(name=>{ if(!profile[name].weekendCat) profile[name].weekendCat = 'rest'; });
+  return profile;
+}
+
+function renderProfileStatus(){
+  const el = document.getElementById('profileStatus');
+  const names = Object.keys(state.previousWeekProfile||{});
+  if(names.length===0){
+    el.textContent = 'No hay tabla anterior guardada todavía — la próxima que confirmes quedará como referencia.';
+  } else {
+    el.textContent = `Hay una tabla anterior guardada (${names.length} personas) — se está usando para evitar cambios bruscos de madrugada al girar.`;
+  }
+}
+
+async function loadPreviousProfile(){
+  if(typeof window.storage === 'undefined'){ state.previousWeekProfile = {}; renderProfileStatus(); return; }
+  try{
+    const res = await window.storage.get('previous_week_profile', false);
+    state.previousWeekProfile = res ? JSON.parse(res.value) : {};
+  } catch(e){
+    state.previousWeekProfile = {};
+  }
+  renderProfileStatus();
+}
+
+async function confirmWeek(){
+  if(!state.schedule) return;
+  const profile = computeWeekProfile(state.schedule);
+  state.previousWeekProfile = profile; // always keep it for the rest of this session, even if it can't be persisted
+  if(typeof window.storage === 'undefined'){
+    renderProfileStatus();
+    document.getElementById('confirmBtn').textContent = '✅ Confirmada (solo esta sesión)';
+    setTimeout(()=>{ document.getElementById('confirmBtn').textContent = '✅ Confirmar esta tabla como definitiva'; }, 2500);
+    return;
+  }
+  try{
+    await window.storage.set('previous_week_profile', JSON.stringify(profile), false);
+    renderProfileStatus();
+    document.getElementById('confirmBtn').textContent = '✅ Tabla confirmada y guardada';
+    setTimeout(()=>{ document.getElementById('confirmBtn').textContent = '✅ Confirmar esta tabla como definitiva'; }, 2500);
+  } catch(e){
+    renderProfileStatus();
+    document.getElementById('confirmBtn').textContent = '✅ Confirmada (solo esta sesión, no se pudo guardar)';
+    setTimeout(()=>{ document.getElementById('confirmBtn').textContent = '✅ Confirmar esta tabla como definitiva'; }, 3000);
+  }
+}
+
+async function forgetPrevious(){
+  if(typeof window.storage !== 'undefined'){
+    try{ await window.storage.delete('previous_week_profile', false); } catch(e){ /* ignore if it didn't exist */ }
+  }
+  state.previousWeekProfile = {};
+  renderProfileStatus();
+}
+
+/* ---------- Rendering the two tables ---------- */
+function weekdayRowsOrdered(sch){
+  // Order: BASE1 x2 (no number), then V1-4 grouped by turno block 06-12,12-18,18-00,00-06, numbered 1..16
+  const rows = [];
+  sch.baseAssign.forEach(a=> rows.push({no:'', cabina:a.cabina, turnoId:a.turnoId, label:WD_TURNOS.find(t=>t.id===a.turnoId).label, name:empName(a.empId), cls:'baseRow'}) );
+  let n=1;
+  ['t2','t3','t4','t1'].forEach((tid, gi)=>{
+    if(gi>0) rows.push({spacer:true});
+    CABINAS.forEach(cab=>{
+      const a = sch.weekdayAssign.find(a=>a.cabina===cab && a.turnoId===tid);
+      const label = WD_TURNOS.find(t=>t.id===tid).label;
+      if(a) rows.push({no:n++, cabina:cab, turnoId:tid, label, name:empName(a.empId), cls:tid});
+      else { rows.push({no:n++, cabina:cab, turnoId:tid, label, name:'⚠ Sin asignar', cls:'unassigned'}); }
+    });
+  });
+  return rows;
+}
+function weekendRowsOrdered(dayData){
+  const rows = [];
+  let n=1;
+  WE_TURNOS.forEach((t,gi)=>{
+    if(gi>0) rows.push({spacer:true});
+    const b = dayData.assign.find(a=>a.cabina==='BASE1' && a.turnoId===t.id);
+    rows.push(b ? {no:n++, cabina:'BASE1', turnoId:t.id, label:t.label, name:empName(b.empId), cls:'baseRow'}
+                : {no:n++, cabina:'BASE1', turnoId:t.id, label:t.label, name:'⚠ Sin asignar', cls:'unassigned'});
+    CABINAS.forEach(cab=>{
+      const a = dayData.assign.find(a=>a.cabina===cab && a.turnoId===t.id);
+      if(a) rows.push({no:n++, cabina:cab, turnoId:t.id, label:t.label, name:empName(a.empId), cls:t.id});
+      else rows.push({no:n++, cabina:cab, turnoId:t.id, label:t.label, name:'⚠ Sin asignar', cls:'unassigned'});
+    });
+  });
+  return rows;
+}
+function rowsToHTML(rows, proyecto){
+  return rows.map(r=>{
+    if(r.spacer) return `<tr class="spacer"><td colspan="5"></td></tr>`;
+    return `<tr class="${r.cls}"><td>${r.no}</td><td>${r.name}</td><td>${r.cabina}</td><td>${r.label}</td><td>${proyecto}</td></tr>`;
+  }).join('');
+}
+
+function renderSchedule(){
+  const out = document.getElementById('scheduleOut');
+  const warnBox = document.getElementById('warnBox');
+  const idleBox = document.getElementById('idleBox');
+  const proyecto = document.getElementById('proyecto').value || '';
+  const sch = state.schedule;
+  const label = weekLabel();
+
+  const wdRows = weekdayRowsOrdered(sch);
+  const satRows = weekendRowsOrdered(sch.weekend.Sabado);
+  const domRows = weekendRowsOrdered(sch.weekend.Domingo);
+
+  out.innerHTML = `
+    <div class="title-bar">HORARIOS ${label ? label.toUpperCase() : 'LUNES A VIERNES'}</div>
+    <div style="overflow-x:auto;">
+    <table><thead><tr><th>No.</th><th>Nombre</th><th>Cabinas</th><th>Lunes a Viernes</th><th>Proyecto</th></tr></thead>
+    <tbody>${rowsToHTML(wdRows, proyecto)}</tbody></table>
+    </div>
+
+    <div class="block-title">Sábado (turno de 12 horas)</div>
+    <div style="overflow-x:auto;">
+    <table><thead><tr><th>No.</th><th>Nombre</th><th>Cabinas</th><th>Horario</th><th>Proyecto</th></tr></thead>
+    <tbody>${rowsToHTML(satRows, proyecto)}</tbody></table>
+    </div>
+
+    <div class="block-title">Domingo (turno de 12 horas)</div>
+    <div style="overflow-x:auto;">
+    <table><thead><tr><th>No.</th><th>Nombre</th><th>Cabinas</th><th>Horario</th><th>Proyecto</th></tr></thead>
+    <tbody>${rowsToHTML(domRows, proyecto)}</tbody></table>
+    </div>
+  `;
+
+  const weekdayGap = sch.weekdayUnassigned.length;
+  const weekendGap = sch.weekend.Sabado.unassigned.length + sch.weekend.Domingo.unassigned.length;
+
+  let warnHtml = '';
+  if(weekdayGap>0){
+    warnHtml += `<div class="warn-box">⚠ Quedaron ${weekdayGap} puesto(s) entre semana SIN CUBRIR — esto sí afecta la operación, porque entre semana todos deben tener puesto. Agrega más compañeros a la lista, quita alguna restricción, o gira de nuevo.</div>`;
+  }
+  if(weekendGap>0){
+    warnHtml += `<div class="idle-box">Fin de semana: ${weekendGap} puesto(s) sin cubrir por falta de personal disponible ese día — esto es normal si no marcaste a suficientes compañeros para sábado/domingo.</div>`;
+  }
+  warnBox.innerHTML = warnHtml;
+
+  let idleHtml = '';
+  if(sch.noAsignadoEntreSemana.length>0){
+    idleHtml += `<div class="idle-box">⚠ Hay ${sch.noAsignadoEntreSemana.length} compañero(s) sin puesto entre semana (sobran personas para los puestos disponibles): ${sch.noAsignadoEntreSemana.map(e=>e.nombre).join(', ')}. Entre semana no debe descansar nadie — agrega un puesto más, o quita a esa persona de la lista si ya no debe rotar.</div>`;
+  }
+  if(sch.weekdayRelaxNote){
+    idleHtml += `<div class="idle-box">Para poder cubrir todos los puestos esta vez tuve que relajar: ${sch.weekdayRelaxNote}. Gira de nuevo si prefieres intentar respetarla.</div>`;
+  }
+  idleBox.innerHTML = idleHtml;
+
+  document.getElementById('exportRow').style.display='flex';
+}
+
+function weekLabel(){
+  const f = document.getElementById('fechaLunes').value;
+  if(!f) return '';
+  const d = new Date(f+'T00:00:00');
+  const opts = {day:'numeric', month:'long'};
+  const end = new Date(d); end.setDate(d.getDate()+4);
+  return `${d.toLocaleDateString('es-GT',opts).replace(/ de /,' DE ')} A ${end.toLocaleDateString('es-GT',opts).replace(/ de /,' DE ')}`;
+}
+
+/* ---------- Export ---------- */
+function exportExcel(){
+  if(!state.schedule) return;
+  const proyecto = document.getElementById('proyecto').value || '';
+  const sch = state.schedule;
+  const wb = XLSX.utils.book_new();
+
+  function sheetFromRows(rows, headerLabel){
+    const data = [['No.','Nombre','Cabinas',headerLabel,'Proyecto']];
+    rows.forEach(r=>{
+      if(r.spacer){ data.push(['','','','','']); return; }
+      data.push([r.no, r.name, r.cabina, r.label, proyecto]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{wch:5},{wch:32},{wch:9},{wch:16},{wch:10}];
+    return ws;
+  }
+  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekdayRowsOrdered(sch), 'Lunes a Viernes'), 'Lunes a Viernes');
+  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekendRowsOrdered(sch.weekend.Sabado), 'Sábado'), 'Sabado');
+  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekendRowsOrdered(sch.weekend.Domingo), 'Domingo'), 'Domingo');
+
+  const label = weekLabel();
+  XLSX.writeFile(wb, `Horario_Turnos${label?'_'+label.replace(/\s+/g,'_'):''}.xlsx`);
+}
+
+function exportPDF(){
+  if(!state.schedule) return;
+  const proyecto = document.getElementById('proyecto').value || '';
+  const sch = state.schedule;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const label = weekLabel();
+  const colorByCls = {t1:[219,234,254], t2:[255,255,255], t3:[220,242,220], t4:[253,246,201], w1:[255,255,255], w2:[253,246,201], baseRow:[255,255,255]};
+
+  function drawTable(title, rows, headerLabel, startY){
+    doc.setFontSize(13);
+    doc.setTextColor(20,20,20);
+    doc.text(title, 14, startY);
+    const body = rows.filter(r=>!r.spacer).map(r=>[r.no, r.name, r.cabina, r.label, proyecto, r.cls]);
+    doc.autoTable({
+      startY: startY+4,
+      head: [['No.','Nombre','Cabinas',headerLabel,'Proyecto']],
+      body: body.map(r=>r.slice(0,5)),
+      theme:'grid',
+      styles:{fontSize:9, cellPadding:2.5},
+      headStyles:{fillColor:[232,114,12], textColor:255},
+      didParseCell: (data)=>{
+        if(data.section==='body'){
+          const raw = body[data.row.index];
+          if(raw[1]==='⚠ Sin asignar'){ data.cell.styles.textColor=[192,57,43]; data.cell.styles.fontStyle='italic'; }
+          else if(colorByCls[raw[5]]) data.cell.styles.fillColor = colorByCls[raw[5]];
+        }
+      }
+    });
+    return doc.lastAutoTable.finalY + 10;
+  }
+
+  let y = 16;
+  y = drawTable(`HORARIOS ${label?label.toUpperCase():'LUNES A VIERNES'}`, weekdayRowsOrdered(sch), 'Lunes a Viernes', y);
+  if(y > 230){ doc.addPage(); y = 16; }
+  y = drawTable('SÁBADO (turno de 12 horas)', weekendRowsOrdered(sch.weekend.Sabado), 'Horario', y);
+  if(y > 230){ doc.addPage(); y = 16; }
+  y = drawTable('DOMINGO (turno de 12 horas)', weekendRowsOrdered(sch.weekend.Domingo), 'Horario', y);
+
+  doc.save(`Horario_Turnos${label?'_'+label.replace(/\s+/g,'_'):''}.pdf`);
+}
+
+function empByName(name){ return allEmpleados().find(e=>e.nombre===name); }
+function fullWeekendSlots(){
+  const s = [];
+  WE_TURNOS.forEach(t=> s.push({cabina:'BASE1', turnoId:t.id}));
+  WE_TURNOS.forEach(t=> CABINAS.forEach(cab=> s.push({cabina:cab, turnoId:t.id})));
+  return s;
+}
+function buildLoadedWeek(){
+  const id = (name)=>{ const e = empByName(name); return e ? e.id : null; };
+  const pairs = [
+    ['BASE1','t2','Jorge Nehemias Leja Cox'], ['BASE1','t3','Alvaro Romeo Miranda Gomez'],
+  ];
+  const baseAssign = pairs.filter(p=>id(p[2])).map(p=>({cabina:p[0], turnoId:p[1], empId:id(p[2])}));
+
+  const genPairs = [
+    ['V1','t2','Jose Alfredo Sanchez Monge'], ['V2','t2','Luisa Fernanda Mejía Ajquí'],
+    ['V3','t2','Jacqueline Pamela Garcia Mendoza'], ['V4','t2','Fernando Estuardo Garcia Tupul'],
+    ['V1','t3','Jose Gabriel Tol Sincu'], ['V2','t3','Erick Fernando Xiloj Ceren'],
+    ['V3','t3','Katerine Mackensy López Morán'], ['V4','t3','Emely Sarai Garcia Camey'],
+    ['V1','t4','Bryan Daniel Estrada Nolasco'], ['V2','t4','Uziel Luis Eli Mazariegos Santizo'],
+    ['V3','t4','Daydi Leylani Suhul Batz'], ['V4','t4','Adriana Guisela Mijangos Tobar'],
+    ['V1','t1','Khaterine Patricia Chiquirin Perdomo'], ['V2','t1','Darlin Griselda Ruiz Gomez'],
+    ['V3','t1','Carlos Gabriel Tamup Otuc'], ['V4','t1','Lina Mishel Lapoyeu Carrillo'],
+  ];
+  const weekdayAssign = genPairs.filter(p=>id(p[2])).map(p=>({cabina:p[0], turnoId:p[1], empId:id(p[2])}));
+  const assignedIds = new Set(weekdayAssign.map(a=>a.empId));
+  const noAsignadoEntreSemana = state.empleados.filter(e=>!assignedIds.has(e.id));
+
+  return {
+    baseAssign, weekdayAssign,
+    weekdayUnassigned: [], noAsignadoEntreSemana, weekdayRelaxNote: null,
+    weekend: { Sabado:{assign:[], unassigned:fullWeekendSlots()}, Domingo:{assign:[], unassigned:fullWeekendSlots()} },
+  };
+}
+
+renderRoleBar();
+renderEmpList();
+renderExclList();
+loadPreviousProfile();
+
+// Load the exact week you sent (lunes 3 a viernes 7 de agosto) so the app opens already showing it.
+document.getElementById('fechaLunes').value = '2026-08-03';
+state.schedule = buildLoadedWeek();
+document.getElementById('spinCount').textContent = 'Tabla cargada: semana del 3 al 7 de agosto (la que enviaste) — falta definir sábado y domingo, gira cuando quieras.';
+document.getElementById('confirmBtn').disabled = false;
+renderSchedule();
+</script>
+</body>
+</html>
