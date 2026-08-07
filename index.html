@@ -75,7 +75,7 @@
     }
   }
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -1210,22 +1210,59 @@ function exportExcel(){
   const proyecto = document.getElementById('proyecto').value || '';
   const sch = state.schedule;
   const wb = XLSX.utils.book_new();
+  const label = weekLabel();
 
-  function sheetFromRows(rows, headerLabel){
-    const data = [['No.','Nombre','Cabinas',headerLabel,'Proyecto']];
+  const HEAD_FILL = '0B2C4D'; // navy, matches the on-screen title bar / table headers
+  const ROW_FILL = { t1:'DBEAFE', t2:'FFFFFF', t3:'DCF2DC', t4:'FDF6C9', w1:'FFFFFF', w2:'FDF6C9', baseRow:'FFFFFF', unassigned:'FDE8E8' };
+  function makeBorder(){
+    return {
+      top:{style:'thin', color:{rgb:'BCD6E8'}},
+      bottom:{style:'thin', color:{rgb:'BCD6E8'}},
+      left:{style:'thin', color:{rgb:'BCD6E8'}},
+      right:{style:'thin', color:{rgb:'BCD6E8'}},
+    };
+  }
+
+  function styleCell(ws, r, c, style){
+    const addr = XLSX.utils.encode_cell({r, c});
+    if(!ws[addr]) ws[addr] = { t:'s', v:'' };
+    ws[addr].s = style;
+  }
+
+  function sheetFromRows(rows, headerLabel, titleText){
+    const aoa = [
+      [titleText, '', '', '', ''],
+      ['NO.', 'NOMBRE', 'CABINAS', headerLabel.toUpperCase(), 'PROYECTO'],
+    ];
     rows.forEach(r=>{
-      if(r.spacer){ data.push(['','','','','']); return; }
-      data.push([r.no, r.name, r.cabina, r.label, proyecto]);
+      aoa.push(r.spacer ? ['','','','',''] : [r.no, r.name, r.cabina, r.label, proyecto]);
     });
-    const ws = XLSX.utils.aoa_to_sheet(data);
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [{wch:5},{wch:32},{wch:9},{wch:16},{wch:10}];
+    ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:4} }];
+
+    for(let c=0;c<5;c++){
+      styleCell(ws, 0, c, { font:{bold:true, sz:13, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:HEAD_FILL}}, alignment:{vertical:'center'} });
+      styleCell(ws, 1, c, { font:{bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:HEAD_FILL}}, alignment:{horizontal:'center', vertical:'center'}, border:makeBorder() });
+    }
+    rows.forEach((r, i)=>{
+      if(r.spacer) return;
+      const rowIdx = i + 2;
+      const fill = ROW_FILL[r.cls] || 'FFFFFF';
+      const font = r.cls==='baseRow' ? {bold:true}
+        : r.cls==='unassigned' ? {italic:true, color:{rgb:'C0392B'}}
+        : {};
+      for(let c=0;c<5;c++){
+        styleCell(ws, rowIdx, c, { fill:{fgColor:{rgb:fill}}, font, border:makeBorder(), alignment:{vertical:'center'} });
+      }
+    });
     return ws;
   }
-  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekdayRowsOrdered(sch), 'Lunes a Viernes'), 'Lunes a Viernes');
-  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekendRowsOrdered(sch.weekend.Sabado), 'Sábado'), 'Sabado');
-  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekendRowsOrdered(sch.weekend.Domingo), 'Domingo'), 'Domingo');
 
-  const label = weekLabel();
+  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekdayRowsOrdered(sch), 'Lunes a Viernes', `HORARIOS ${label ? label.toUpperCase() : 'LUNES A VIERNES'}`), 'Lunes a Viernes');
+  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekendRowsOrdered(sch.weekend.Sabado), 'Horario', 'SÁBADO (TURNO DE 12 HORAS)'), 'Sabado');
+  XLSX.utils.book_append_sheet(wb, sheetFromRows(weekendRowsOrdered(sch.weekend.Domingo), 'Horario', 'DOMINGO (TURNO DE 12 HORAS)'), 'Domingo');
+
   XLSX.writeFile(wb, `Horario_Turnos${label?'_'+label.replace(/\s+/g,'_'):''}.xlsx`);
 }
 
